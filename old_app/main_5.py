@@ -28,6 +28,7 @@ init_db()
 class Status(Enum):
     WAITING = "waiting"
     PROCESSED = "processed"
+    CANCELLED="cancelled"
 
 class Ticket(BaseModel):
     id: int
@@ -89,6 +90,24 @@ def process_next_ticket():
 
     return Ticket(id=row[0], number=row[1], date=row[2], status=Status.PROCESSED)
 
+@app.put("tickets/cancel/{id}",response_model=Ticket)
+def cancel_ticket(id:int):
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM tickets WHERE status = ? && id =  ? ORDER BY number ASC LIMIT 1", (Status.WAITING.value,id))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="No tickets in the queue")
+
+    ticket_id = row[0]
+    cursor.execute("UPDATE tickets SET status = ? WHERE id = ?", (Status.CANCELLED.value, ticket_id))
+    conn.commit()
+    conn.close()
+
+    return Ticket(id=row[0], number=row[1], date=row[2], status=Status.CANCELLED)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main_5:app", host="127.0.0.1", port=8000, reload=True)
